@@ -1,6 +1,6 @@
 #SUBDIRS( InverseDynamics BulletRobotics obj2sdf Serialize ConvexDecomposition HACD GIMPACTUtils )
+SUBDIRS( Serialize)
 
-SUBDIRS(Serialize)
 
 #Maya Dynamica plugin is moved to http://dynamica.googlecode.com
 
