@@ -19,3 +19,10 @@ pip-selfcheck.json
 /build
 /dist
 *.eggs
+
+# Android
+.externalNativeBuild
+build
+.idea
+.gradle
+
