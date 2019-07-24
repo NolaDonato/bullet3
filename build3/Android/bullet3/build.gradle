@@ -25,6 +25,7 @@ def buildRoot = project.getRootDir()
 def buildType = gradle.startParameter.taskNames.any {it.toLowerCase().contains("debug") ? "debug" : "release"}
 
 android {
+    publishNonDefault  true
     compileSdkVersion 26
 
     defaultConfig {
@@ -47,11 +48,11 @@ android {
 						  '-DBUILD_OPENGL3_DEMOS=OFF',
 						  '-DBUILD_BULLET2_DEMOS=OFF',
 						  '-DBUILD_EXTRAS=ON',
-						  '-DINSTALL_LIBS=OFF',
+                          '-DINSTALL_LIBS=OFF',
                           '-DINSTALL_EXTRA_LIBS=OFF',
-						  '-DBUILD_UNIT_TESTS=OFF',
+                          '-DBUILD_UNIT_TESTS=OFF',
                           '-DBUILD_SHARED_LIBS=ON',
-                          '-DUSE_DOUBLE_PRECISION=OFF',
+                          '-DUSE_DOUBLE_PRECISION=OFF',<<<<<<< HEAD
                           '-DUSE_SOFT_BODY_MULTI_BODY_DYNAMICS_WORLD=OFF',
                           '-DPKGCONFIG_INSTALL_PREFIX=' + buildRoot + '/jni/libs'
             }
@@ -63,6 +64,10 @@ android {
         {
             debuggable true
             minifyEnabled false
+            packagingOptions
+            {
+                doNotStrip "**/*/*.so"
+            }
             externalNativeBuild
             {
                 cmake
@@ -88,7 +93,7 @@ android {
     {
         cmake
         {
-            path '../../../CMakeLists.txt'
+            path 'CMakeLists.txt'
         }
     }
 }
