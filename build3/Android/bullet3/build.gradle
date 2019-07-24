@@ -25,7 +25,6 @@ def buildRoot = project.getRootDir()
 def buildType = gradle.startParameter.taskNames.any {it.toLowerCase().contains("debug") ? "debug" : "release"}
 
 android {
-    publishNonDefault  true
     compileSdkVersion 26
 
     defaultConfig {
@@ -52,7 +51,7 @@ android {
                           '-DINSTALL_EXTRA_LIBS=OFF',
                           '-DBUILD_UNIT_TESTS=OFF',
                           '-DBUILD_SHARED_LIBS=ON',
-                          '-DUSE_DOUBLE_PRECISION=OFF',<<<<<<< HEAD
+                          '-DUSE_DOUBLE_PRECISION=OFF',
                           '-DUSE_SOFT_BODY_MULTI_BODY_DYNAMICS_WORLD=OFF',
                           '-DPKGCONFIG_INSTALL_PREFIX=' + buildRoot + '/jni/libs'
             }
