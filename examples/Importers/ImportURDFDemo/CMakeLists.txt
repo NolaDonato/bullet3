@@ -20,8 +20,8 @@ ADD_LIBRARY(URDFConverterLib
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/Importers/ImportObjDemo/LoadMeshFromObj.cpp
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/Importers/ImportColladaDemo/LoadMeshFromCollada.cpp
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/Importers/ImportMeshUtility/b3ImportMeshUtility.cpp
-        ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Wavefront/tiny_obj_loader.cpp
-        ${BULLET_PHYSICS_SOURCE_DIR}/examples/Importers/ImportObjDemo/Wavefront2GLInstanceGraphicsShape.cpp
+    ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Wavefront/tiny_obj_loader.cpp
+    ${BULLET_PHYSICS_SOURCE_DIR}/examples/Importers/ImportObjDemo/Wavefront2GLInstanceGraphicsShape.cpp
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/stb_image/stb_image.cpp
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/stb_image/stb_image_write.cpp
 )
@@ -54,10 +54,11 @@ INSTALL(TARGETS URDFConverterLib
 
 
 INCLUDE_DIRECTORIES(
-        ${BULLET_PHYSICS_SOURCE_DIR}/src
+    ${BULLET_PHYSICS_SOURCE_DIR}/src
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/SharedMemory
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/Importers/ImportURDFDemo
-        ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs
+    ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs
+	${BULLET_PHYSICS_SOURCE_DIR}/examples/CommonInterfaces
 )
 
 

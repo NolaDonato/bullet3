@@ -4,9 +4,9 @@
 #include "BulletDynamics/Featherstone/btMultiBodyLinkCollider.h"
 #include "BulletDynamics/Featherstone/btMultiBodyDynamicsWorld.h"
 #include "BulletUrdfImporter.h"
+#include "CommonGUIHelperInterface.h"
 #include "URDF2Bullet.h"
-#include "BulletDynamics/Featherstone/btMultiBodyLinkCollider.h"
-#include "BulletDynamics/Featherstone/btMultiBodyDynamicsWorld.h"
+#include "BulletCollision/CollisionDispatch/btCollisionObject.h"
 #include "BulletCollision/CollisionShapes/btCompoundShape.h"
 #include "btBulletDynamicsCommon.h"
 #include "MultiBodyCreationInterface.h"
@@ -24,58 +24,90 @@ struct GenericConstraintUserInfo
 	btScalar m_upperJointLimit;
 };
 
-btMultiBody* MultiBodyCreator::allocateMultiBody(int /* urdfLinkIndex */, int totalNumJoints,
-                               btScalar mass, const btVector3& localInertiaDiagonal,
-                               bool isFixedBase, bool canSleep)
+MultiBodyCreator::MultiBodyCreator(const URDFImporterInterface& u2b) : m_urdfImport(u2b)
 {
-    m_mb2urdfLink.resize(totalNumJoints + 1, -2);
-    m_bulletMultiBody = new btMultiBody(totalNumJoints, mass, localInertiaDiagonal, isFixedBase, canSleep);
-    return m_bulletMultiBody;
+	m_bodies.resize(u2b.getNumAllocatedCollisionShapes());
+}
+
+void MultiBodyCreator::registerNameForPointer(int urdfIndex, btCollisionObject* ptr, const std::string& name)
+{
+	if (m_bodies.size() <= urdfIndex)
+	{
+		m_bodies.resize(urdfIndex + 1);
+		m_names.resize(urdfIndex + 1);
+	}
+	m_bodies[urdfIndex] = ptr;
+	m_names[urdfIndex] = name;
+}
+
+btMultiBody* MultiBodyCreator::allocateMultiBody(int urdfLinkIndex, int totalNumJoints,
+												 btScalar mass, const btVector3& localInertiaDiagonal,
+												 bool isFixedBase, bool canSleep)
+{
+	m_mb2urdfLink.resize(totalNumJoints + 1, -2);
+	m_bulletMultiBody = new btMultiBody(totalNumJoints, mass, localInertiaDiagonal, isFixedBase, canSleep);
+	m_bulletMultiBody->setBaseName(m_urdfImport.getBodyName().c_str());
+	registerNameForPointer(urdfLinkIndex, m_bulletMultiBody->getBaseCollider(), m_urdfImport.getBodyName());
+	return m_bulletMultiBody;
 }
 
 btRigidBody* MultiBodyCreator::allocateRigidBody(int urdfLinkIndex, btScalar mass,
-                              const btVector3& localInertiaDiagonal,
-                              const btTransform& initialWorldTrans,
-                              class btCollisionShape* colShape)
+												 const btVector3& localInertiaDiagonal,
+												 const btTransform& initialWorldTrans,
+												 class btCollisionShape* colShape)
 {
-    btRigidBody::btRigidBodyConstructionInfo rbci(mass, 0, colShape, localInertiaDiagonal);
-    rbci.m_startWorldTransform = initialWorldTrans;
-    btRigidBody* body = new btRigidBody(rbci);
-    if (m_rigidBody == 0)
-    {
-        m_rigidBody = body;
-    }
-    return body;
+	btRigidBody::btRigidBodyConstructionInfo rbci(mass, 0, colShape, localInertiaDiagonal);
+	rbci.m_startWorldTransform = initialWorldTrans;
+	btRigidBody* body = new btRigidBody(rbci);
+	if (m_rigidBody == 0)
+	{
+		m_rigidBody = body;
+	}
+	std::string name;
+	if (urdfLinkIndex > 0)
+	{
+		name = m_urdfImport.getJointName(urdfLinkIndex);
+	}
+	else
+	{
+		name = m_urdfImport.getBodyName();
+	}
+	registerNameForPointer(urdfLinkIndex, body, name);
+	return body;
 }
 
-btMultiBodyLinkCollider* MultiBodyCreator::allocateMultiBodyLinkCollider(int /*urdfLinkIndex*/,
-                                           int mbLinkIndex, btMultiBody* multiBody)
+btMultiBodyLinkCollider* MultiBodyCreator::allocateMultiBodyLinkCollider(int urdfLinkIndex,
+																		 int mbLinkIndex, btMultiBody* multiBody)
 {
-    btMultiBodyLinkCollider* mbCol = new btMultiBodyLinkCollider(multiBody, mbLinkIndex);
-    return mbCol;
+	btMultiBodyLinkCollider* mbCol = new btMultiBodyLinkCollider(multiBody, mbLinkIndex);
+
+	multiBody->getLink(mbLinkIndex).m_jointName = m_urdfImport.getJointName(urdfLinkIndex).c_str();
+	multiBody->getLink(mbLinkIndex).m_linkName = m_urdfImport.getLinkName(urdfLinkIndex).c_str();
+	registerNameForPointer(urdfLinkIndex, mbCol, m_urdfImport.getJointName(urdfLinkIndex));
+	return mbCol;
 }
 
-btGeneric6DofSpring2Constraint* MultiBodyCreator::allocateGeneric6DofSpring2Constraint(int urdfLinkIndex, 
-                                                  btRigidBody& rbA /*parent*/, 
-                                                  btRigidBody& rbB,
-                                                  const btTransform& offsetInA,
-                                                  const btTransform& offsetInB, 
-                                                  int rotateOrder)
+btGeneric6DofSpring2Constraint* MultiBodyCreator::allocateGeneric6DofSpring2Constraint(int urdfLinkIndex,
+																					   btRigidBody& rbA /*parent*/,
+																					   btRigidBody& rbB,
+																					   const btTransform& offsetInA,
+																					   const btTransform& offsetInB,
+																					   int rotateOrder)
 {
-    return new btGeneric6DofSpring2Constraint(rbA, rbB, offsetInA, offsetInB, (RotateOrder)rotateOrder);
+	return new btGeneric6DofSpring2Constraint(rbA, rbB, offsetInA, offsetInB, (RotateOrder)rotateOrder);
 }
 
-btGeneric6DofSpring2Constraint* MultiBodyCreator::createPrismaticJoint(int urdfLinkIndex, 
-                                                  btRigidBody& rbA /*parent*/, 
-                                                  btRigidBody& rbB, 
-                                                  const btTransform& offsetInA, 
-                                                  const btTransform& offsetInB,
-                                                  const btVector3& jointAxisInJointSpace, 
-                                                  btScalar jointLowerLimit, btScalar jointUpperLimit)
+btGeneric6DofSpring2Constraint* MultiBodyCreator::createPrismaticJoint(int urdfLinkIndex,
+																	   btRigidBody& rbA /*parent*/,
+																	   btRigidBody& rbB,
+																	   const btTransform& offsetInA,
+																	   const btTransform& offsetInB,
+																	   const btVector3& jointAxisInJointSpace,
+																	   btScalar jointLowerLimit, btScalar jointUpperLimit)
 {
-    int rotateOrder = 0;
-    btGeneric6DofSpring2Constraint* dof6 = allocateGeneric6DofSpring2Constraint(urdfLinkIndex, rbA, rbB, 
-                                           offsetInA, offsetInB, rotateOrder);
+	int rotateOrder = 0;
+	btGeneric6DofSpring2Constraint* dof6 = allocateGeneric6DofSpring2Constraint(urdfLinkIndex, rbA, rbB,
+																				offsetInA, offsetInB, rotateOrder);
 	//todo(erwincoumans) for now, we only support principle axis along X, Y or Z
 	int principleAxis = jointAxisInJointSpace.closestAxis();
 
@@ -91,24 +123,24 @@ btGeneric6DofSpring2Constraint* MultiBodyCreator::createPrismaticJoint(int urdfL
 
 	switch (principleAxis)
 	{
-	    case 0:
-	    {
-		dof6->setLinearLowerLimit(btVector3(jointLowerLimit, 0, 0));
-		dof6->setLinearUpperLimit(btVector3(jointUpperLimit, 0, 0));
-		break;
-	    }
-	    case 1:
-	    {
-		dof6->setLinearLowerLimit(btVector3(0, jointLowerLimit, 0));
-		dof6->setLinearUpperLimit(btVector3(0, jointUpperLimit, 0));
-		break;
-	    }
-	    case 2:
-	    default:
-	    {
-		dof6->setLinearLowerLimit(btVector3(0, 0, jointLowerLimit));
-		dof6->setLinearUpperLimit(btVector3(0, 0, jointUpperLimit));
-	    }
+		case 0:
+		{
+			dof6->setLinearLowerLimit(btVector3(jointLowerLimit, 0, 0));
+			dof6->setLinearUpperLimit(btVector3(jointUpperLimit, 0, 0));
+			break;
+		}
+		case 1:
+		{
+			dof6->setLinearLowerLimit(btVector3(0, jointLowerLimit, 0));
+			dof6->setLinearUpperLimit(btVector3(0, jointUpperLimit, 0));
+			break;
+		}
+		case 2:
+		default:
+		{
+			dof6->setLinearLowerLimit(btVector3(0, 0, jointLowerLimit));
+			dof6->setLinearUpperLimit(btVector3(0, 0, jointUpperLimit));
+		}
 	};
 
 	dof6->setAngularLowerLimit(btVector3(0, 0, 0));
@@ -118,12 +150,12 @@ btGeneric6DofSpring2Constraint* MultiBodyCreator::createPrismaticJoint(int urdfL
 }
 
 btGeneric6DofSpring2Constraint* MultiBodyCreator::createRevoluteJoint(int urdfLinkIndex,
-                                                  btRigidBody& rbA /*parent*/,
-                                                  btRigidBody& rbB,
-                                                  const btTransform& offsetInA,
-                                                  const btTransform& offsetInB,
-                                                  const btVector3& jointAxisInJointSpace,
-                                                  btScalar jointLowerLimit, btScalar jointUpperLimit)
+																	  btRigidBody& rbA /*parent*/,
+																	  btRigidBody& rbB,
+																	  const btTransform& offsetInA,
+																	  const btTransform& offsetInB,
+																	  const btVector3& jointAxisInJointSpace,
+																	  btScalar jointLowerLimit, btScalar jointUpperLimit)
 {
 	btGeneric6DofSpring2Constraint* dof6 = 0;
 
@@ -185,11 +217,11 @@ btGeneric6DofSpring2Constraint* MultiBodyCreator::createRevoluteJoint(int urdfLi
 	return dof6;
 }
 
-    btGeneric6DofSpring2Constraint* MultiBodyCreator::createFixedJoint(int urdfLinkIndex,
-                                                     btRigidBody& rbA /*parent*/, 
-                                                     btRigidBody& rbB, 
-                                                     const btTransform& offsetInA,
-                                                     const btTransform& offsetInB)
+btGeneric6DofSpring2Constraint* MultiBodyCreator::createFixedJoint(int urdfLinkIndex,
+																   btRigidBody& rbA /*parent*/,
+																   btRigidBody& rbB,
+																   const btTransform& offsetInA,
+																   const btTransform& offsetInB)
 {
 	btGeneric6DofSpring2Constraint* dof6 = allocateGeneric6DofSpring2Constraint(urdfLinkIndex, rbA, rbB, offsetInA, offsetInB);
 
@@ -210,101 +242,111 @@ btGeneric6DofSpring2Constraint* MultiBodyCreator::createRevoluteJoint(int urdfLi
 
 void MultiBodyCreator::addLinkMapping(int urdfLinkIndex, int mbLinkIndex)
 {
-    if (m_mb2urdfLink.size() < (mbLinkIndex + 1))
-    {
-	m_mb2urdfLink.resize((mbLinkIndex + 1), -2);
-    }
-    m_mb2urdfLink[mbLinkIndex] = urdfLinkIndex;
+	if (m_mb2urdfLink.size() < (mbLinkIndex + 1))
+	{
+		m_mb2urdfLink.resize((mbLinkIndex + 1), -2);
+	}
+	m_mb2urdfLink[mbLinkIndex] = urdfLinkIndex;
 }
 
+void MultiBodyCreator::registerNames(btSerializer& s)
+{
+	int index = 0;
+	for (auto it = m_bodies.begin(); it < m_bodies.end(); ++it)
+	{
+		btCollisionObject* body = *it;
+		if (body)
+		{
+			s.registerNameForPointer(body, m_names[index].c_str());
+		}
+		++index;
+	}
+}
 
 URDFConverter::URDFConverter(bool isMultiBody)
-:   CommonMultiBodyBase(NULL),
-    m_dynamicsWorld(NULL),
-    m_useMultiBody(isMultiBody)
+	: CommonMultiBodyBase(NULL),
+	  m_dynamicsWorld(NULL),
+	  m_useMultiBody(isMultiBody)
 {
-    
 }
 
 URDFConverter::~URDFConverter()
 {
-    if (m_dynamicsWorld)
-    {
-        delete m_dynamicsWorld;
-    }
+	if (m_dynamicsWorld)
+	{
+		delete m_dynamicsWorld;
+	}
 }
-
 
 btMultiBodyDynamicsWorld* URDFConverter::importPhysics(const char* urdfFile)
 {
-    m_urdfFileName = urdfFile;
-    initPhysics();
+	m_urdfFileName = urdfFile;
+	initPhysics();
+	return m_dynamicsWorld;
 }
 
 void URDFConverter::initPhysics()
 {
-    createWorld();
+	createWorld();
+	DummyGUIHelper gui;
+	BulletURDFImporter u2b(&gui, 0, 0, 1, 0);
+	bool loadOk = u2b.loadURDF(m_urdfFileName.c_str());
 
-    BulletURDFImporter u2b(NULL, 0, 0, 1, 0);
-    bool loadOk = u2b.loadURDF(m_urdfFileName.c_str());
+	if (loadOk)
+	{
+		//printTree(u2b,u2b.getRootLinkIndex());
+		//u2b.printTree();
+		m_creator = new MultiBodyCreator(u2b);
 
-    if (loadOk)
-    {
-        //printTree(u2b,u2b.getRootLinkIndex());
-        //u2b.printTree();
-	MultiBodyCreator creation;
-        btTransform identityTrans;
-        identityTrans.setIdentity();
+		btTransform identityTrans;
+		identityTrans.setIdentity();
 
-        ConvertURDF2Bullet(u2b, creation, identityTrans, m_dynamicsWorld, m_useMultiBody, u2b.getPathPrefix());
-    }
+		ConvertURDF2Bullet(u2b, *m_creator, identityTrans, m_dynamicsWorld, m_useMultiBody, u2b.getPathPrefix());
+	}
 }
 
 bool URDFConverter::exportPhysics(const char* bulletFile)
 {
-    FILE* f = fopen(bulletFile, "wb");
+	FILE* f = fopen(bulletFile, "wb");
 
-    if (f == NULL)
-    {
-        return false;
-    }
-    btSerializer* s = new btDefaultSerializer;
-
-    m_dynamicsWorld->serialize(s);
-    fwrite(s->getBufferPointer(), s->getCurrentBufferSize(), 1, f);
-    fclose(f);
-    return true;
+	if (f == NULL)
+	{
+		return false;
+	}
+	btSerializer* s = new btDefaultSerializer;
+	m_creator->registerNames(*s);
+	m_dynamicsWorld->serialize(s);
+	fwrite(s->getBufferPointer(), s->getCurrentBufferSize(), 1, f);
+	fclose(f);
+	return true;
 }
 
 btMultiBodyDynamicsWorld* URDFConverter::createWorld()
 {
-    btDefaultCollisionConfiguration* colconfig = new btDefaultCollisionConfiguration();
-    MyOverlapFilterCallback2* filterCallback = new MyOverlapFilterCallback2();
-    btCollisionDispatcher* dispatcher = new btCollisionDispatcher(colconfig);
-    btHashedOverlappingPairCache* pairCache = new btHashedOverlappingPairCache();
+	btDefaultCollisionConfiguration* colconfig = new btDefaultCollisionConfiguration();
+	MyOverlapFilterCallback2* filterCallback = new MyOverlapFilterCallback2();
+	btCollisionDispatcher* dispatcher = new btCollisionDispatcher(colconfig);
+	btHashedOverlappingPairCache* pairCache = new btHashedOverlappingPairCache();
 
-    pairCache->setOverlapFilterCallback(filterCallback);
-    btDbvtBroadphase* broadPhase = new btDbvtBroadphase(pairCache);  //btSimpleBroadphase();
-    btMultiBodyConstraintSolver* solver = new btMultiBodyConstraintSolver;
-    m_dynamicsWorld = new btMultiBodyDynamicsWorld(dispatcher, broadPhase, m_solver, colconfig);
-    m_dynamicsWorld->setGravity(btVector3(0, -9.81, 0));
-    return m_dynamicsWorld;
+	pairCache->setOverlapFilterCallback(filterCallback);
+	btDbvtBroadphase* broadPhase = new btDbvtBroadphase(pairCache);  //btSimpleBroadphase();
+	btMultiBodyConstraintSolver* solver = new btMultiBodyConstraintSolver;
+	m_dynamicsWorld = new btMultiBodyDynamicsWorld(dispatcher, broadPhase, m_solver, colconfig);
+	m_dynamicsWorld->setGravity(btVector3(0, -9.81, 0));
+	return m_dynamicsWorld;
 }
 
 int main(int argc, char* argv[])
 {
-    if (argc <= 3)
-    {
-        std::cerr << "Usage: urdfconverter <urdfilepath> <bulletfilepath>";
-	exit(0);
-    }
-    const char* urdfFile = argv[1];
-    const char* bulletFile = argv[2];
-    URDFConverter converter(false);
-    converter.importPhysics(urdfFile);
-    converter.exportPhysics(bulletFile);
-    exit(1);
+	if (argc < 3)
+	{
+		std::cerr << "Usage: urdfconverter <urdfilepath> <bulletfilepath>";
+		exit(0);
+	}
+	const char* urdfFile = argv[1];
+	const char* bulletFile = argv[2];
+	URDFConverter converter(false);
+	converter.importPhysics(urdfFile);
+	converter.exportPhysics(bulletFile);
+	exit(1);
 }
-
-
-
