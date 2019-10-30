@@ -48,6 +48,11 @@ public:
 									  btMultiBodyJacobianData & data,
 									  const btContactSolverInfo& infoGlobal);
 
+	btRigidBody* const getRigidBodyB() const
+	{
+		return m_rigidBodyB;
+	}
+
 	const btVector3& getPivotInB() const
 	{
 		return m_pivotInB;

@@ -106,11 +106,12 @@ public:
 		return m_numRows;
 	}
 
-	btMultiBody* getMultiBodyA()
+	btMultiBody* const getMultiBodyA() const
 	{
 		return m_bodyA;
 	}
-	btMultiBody* getMultiBodyB()
+
+	btMultiBody* const getMultiBodyB() const
 	{
 		return m_bodyB;
 	}
