@@ -462,29 +462,11 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 			{
 				btMultiBodyDoubleData* mbd = (btMultiBodyDoubleData*)bulletFile2->m_multiBodies[i];
 				convertMultiBody(mbd, m_data);
-				btMultiBody** mb = m_data->m_mbMap.find(mbd);
-                char* oldname = mbd->m_baseName;
-                btMultiBodyLinkCollider* btc = (*mb)->getBaseCollider();
-                if (oldname && btc)
-                {
-                    char* newname = duplicateName(oldname);
-                    m_objectNameMap.insert(btc, newname);
-                    (*mb)->setBaseName(newname);
-                }
             }
 			else
 			{
 				btMultiBodyFloatData* mbd = (btMultiBodyFloatData*)bulletFile2->m_multiBodies[i];
 				convertMultiBody(mbd, m_data);
-                btMultiBody** mb = m_data->m_mbMap.find(mbd);
-                char* oldname = mbd->m_baseName;
-				btMultiBodyLinkCollider* btc = (*mb)->getBaseCollider();
-				if (oldname && btc)
-                {
-                    char* newname = duplicateName(oldname);
-                    m_objectNameMap.insert(btc, newname);
-                    (*mb)->setBaseName(newname);
-                }
 			}
 		}
 
@@ -533,22 +515,28 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 							//m_bodyMap.insert(colObjData,body);
 							if (mblcd->m_link == -1)
 							{
+								char* oldname = mblcd->m_multiBody->m_baseName;
 								col->setWorldTransform(multiBody->getBaseWorldTransform());
 								multiBody->setBaseCollider(col);
-                            }
+								if (oldname)
+								{
+									char* newname = duplicateName(oldname);
+									m_objectNameMap.insert(col, newname);
+									multiBody->setBaseName(newname);
+								}
+							}
 							else
 							{
 							    btMultibodyLink& link = multiBody->getLink(mblcd->m_link);
 							    btMultiBodyDoubleData* mbd = mblcd->m_multiBody;
 								col->setWorldTransform(link.m_cachedWorldTransform);
 								link.m_collider = col;
-								char* oldname = mbd->m_links[mblcd->m_link]->m_jointName;
+								char* oldname = mbd->m_links[mblcd->m_link].m_jointName;
 								if (oldname)
                                 {
 								    char* newname = duplicateName(oldname);
                                     m_objectNameMap.insert(col, newname);
                                     link.m_jointName = newname;
-
                                 }
                             }
 							int mbLinkIndex = mblcd->m_link;
@@ -600,7 +588,6 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 						startTransform.deSerializeFloat(mblcd->m_colObjData.m_worldTransform);
 
 						btCollisionShape* shape = (btCollisionShape*)*shapePtr;
-						const char* oldname = nullptr;
 						if (shape)
 						{
 							btMultiBodyLinkCollider* col = new btMultiBodyLinkCollider(multiBody, mblcd->m_link);
@@ -611,7 +598,15 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 							//m_bodyMap.insert(colObjData,body);
 							if (mblcd->m_link == -1)
 							{
+								char* oldname = mblcd->m_multiBody->m_baseName;
 								col->setWorldTransform(multiBody->getBaseWorldTransform());
+								multiBody->setBaseCollider(col);
+								if (oldname)
+								{
+									char* newname = duplicateName(oldname);
+									m_objectNameMap.insert(col, newname);
+									multiBody->setBaseName(newname);
+								}
 							}
 							else
 							{
@@ -620,7 +615,7 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 
                                 col->setWorldTransform(link.m_cachedWorldTransform);
 								link.m_collider = col;
-                                char* oldname = mbd->m_links[mblcd->m_link]->m_jointName;
+                                char* oldname = mbd->m_links[mblcd->m_link].m_jointName;
                                 if (oldname)
                                 {
                                     char* newname = duplicateName(oldname);
