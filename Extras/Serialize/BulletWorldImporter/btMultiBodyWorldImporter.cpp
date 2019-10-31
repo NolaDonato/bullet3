@@ -7,6 +7,8 @@
 #include "BulletDynamics/Featherstone/btMultiBody.h"
 #include "BulletDynamics/Featherstone/btMultiBodyDynamicsWorld.h"
 #include "BulletDynamics/Featherstone/btMultiBodyLinkCollider.h"
+#include "BulletDynamics/Featherstone/btMultiBodyLink.h"
+#include "../../../src/BulletDynamics/Featherstone/btMultiBodyLinkCollider.h"
 
 struct btMultiBodyWorldImporterInternalData
 {
@@ -188,7 +190,6 @@ void convertMultiBody(T* mbd, btMultiBodyWorldImporterInternalData* m_data)
 	baseWorldOrn.deSerialize(mbd->m_baseWorldOrientation);
 	mb->setBasePos(baseWorldPos);
 	mb->setWorldToBaseRot(baseWorldOrn.inverse());
-
 	m_data->m_mbMap.insert(mbd, mb);
 	for (int i = 0; i < mbd->m_numLinks; i++)
 	{
@@ -201,7 +202,7 @@ void convertMultiBody(T* mbd, btMultiBodyWorldImporterInternalData* m_data)
 		btVector3 thisPivotToThisComOffset;
 		thisPivotToThisComOffset.deSerialize(mbd->m_links[i].m_thisPivotToThisComOffset);
 
-		switch (mbd->m_links[i].m_jointType)
+        switch (mbd->m_links[i].m_jointType)
 		{
 			case btMultibodyLink::eFixed:
 			{
@@ -461,11 +462,29 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 			{
 				btMultiBodyDoubleData* mbd = (btMultiBodyDoubleData*)bulletFile2->m_multiBodies[i];
 				convertMultiBody(mbd, m_data);
-			}
+				btMultiBody** mb = m_data->m_mbMap.find(mbd);
+                char* oldname = mbd->m_baseName;
+                btMultiBodyLinkCollider* btc = (*mb)->getBaseCollider();
+                if (oldname && btc)
+                {
+                    char* newname = duplicateName(oldname);
+                    m_objectNameMap.insert(btc, newname);
+                    (*mb)->setBaseName(newname);
+                }
+            }
 			else
 			{
 				btMultiBodyFloatData* mbd = (btMultiBodyFloatData*)bulletFile2->m_multiBodies[i];
 				convertMultiBody(mbd, m_data);
+                btMultiBody** mb = m_data->m_mbMap.find(mbd);
+                char* oldname = mbd->m_baseName;
+				btMultiBodyLinkCollider* btc = (*mb)->getBaseCollider();
+				if (oldname && btc)
+                {
+                    char* newname = duplicateName(oldname);
+                    m_objectNameMap.insert(btc, newname);
+                    (*mb)->setBaseName(newname);
+                }
 			}
 		}
 
@@ -506,6 +525,7 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 						if (shape)
 						{
 							btMultiBodyLinkCollider* col = new btMultiBodyLinkCollider(multiBody, mblcd->m_link);
+
 							col->setCollisionShape(shape);
 							//btCollisionObject* body = createCollisionObject(startTransform,shape,mblcd->m_colObjData.m_name);
 							col->setFriction(btScalar(mblcd->m_colObjData.m_friction));
@@ -515,11 +535,98 @@ bool btMultiBodyWorldImporter::convertAllObjects(bParse::btBulletFile* bulletFil
 							{
 								col->setWorldTransform(multiBody->getBaseWorldTransform());
 								multiBody->setBaseCollider(col);
+                            }
+							else
+							{
+							    btMultibodyLink& link = multiBody->getLink(mblcd->m_link);
+							    btMultiBodyDoubleData* mbd = mblcd->m_multiBody;
+								col->setWorldTransform(link.m_cachedWorldTransform);
+								link.m_collider = col;
+								char* oldname = mbd->m_links[mblcd->m_link]->m_jointName;
+								if (oldname)
+                                {
+								    char* newname = duplicateName(oldname);
+                                    m_objectNameMap.insert(col, newname);
+                                    link.m_jointName = newname;
+
+                                }
+                            }
+							int mbLinkIndex = mblcd->m_link;
+
+							bool isDynamic = (mbLinkIndex < 0 && multiBody->hasFixedBase()) ? false : true;
+							int collisionFilterGroup = isDynamic ? int(btBroadphaseProxy::DefaultFilter) : int(btBroadphaseProxy::StaticFilter);
+							int collisionFilterMask = isDynamic ? int(btBroadphaseProxy::AllFilter) : int(btBroadphaseProxy::AllFilter ^ btBroadphaseProxy::StaticFilter);
+
+#if 0
+							int colGroup = 0, colMask = 0;
+							int collisionFlags = mblcd->m_colObjData.m_collisionFlags;
+							if (collisionFlags & URDF_HAS_COLLISION_GROUP)
+							{
+								collisionFilterGroup = colGroup;
+							}
+							if (collisionFlags & URDF_HAS_COLLISION_MASK)
+							{
+								collisionFilterMask = colMask;
+							}
+#endif
+							m_data->m_mbDynamicsWorld->addCollisionObject(col, collisionFilterGroup, collisionFilterMask);
+						}
+					}
+					else
+					{
+						printf("error: no shape found\n");
+					}
+#if 0
+					//base and fixed? -> static, otherwise flag as dynamic
+
+					world1->addCollisionObject(col, collisionFilterGroup, collisionFilterMask);
+#endif
+				}
+			}
+			else
+			{
+				btMultiBodyLinkColliderFloatData* mblcd = (btMultiBodyLinkColliderFloatData*)bulletFile2->m_multiBodyLinkColliders[i];
+
+				btMultiBody** ptr = m_data->m_mbMap[mblcd->m_multiBody];
+				if (ptr)
+				{
+					btMultiBody* multiBody = *ptr;
+
+					btCollisionShape** shapePtr = m_shapeMap.find(mblcd->m_colObjData.m_collisionShape);
+					if (shapePtr && *shapePtr)
+					{
+						btTransform startTransform;
+						mblcd->m_colObjData.m_worldTransform.m_origin.m_floats[3] = 0.f;
+						startTransform.deSerializeFloat(mblcd->m_colObjData.m_worldTransform);
+
+						btCollisionShape* shape = (btCollisionShape*)*shapePtr;
+						const char* oldname = nullptr;
+						if (shape)
+						{
+							btMultiBodyLinkCollider* col = new btMultiBodyLinkCollider(multiBody, mblcd->m_link);
+							col->setCollisionShape(shape);
+							//btCollisionObject* body = createCollisionObject(startTransform,shape,mblcd->m_colObjData.m_name);
+							col->setFriction(btScalar(mblcd->m_colObjData.m_friction));
+							col->setRestitution(btScalar(mblcd->m_colObjData.m_restitution));
+							//m_bodyMap.insert(colObjData,body);
+							if (mblcd->m_link == -1)
+							{
+								col->setWorldTransform(multiBody->getBaseWorldTransform());
 							}
 							else
 							{
-								col->setWorldTransform(multiBody->getLink(mblcd->m_link).m_cachedWorldTransform);
-								multiBody->getLink(mblcd->m_link).m_collider = col;
+							    btMultibodyLink& link = multiBody->getLink(mblcd->m_link);
+                                btMultiBodyFloatData* mbd = mblcd->m_multiBody;
+
+                                col->setWorldTransform(link.m_cachedWorldTransform);
+								link.m_collider = col;
+                                char* oldname = mbd->m_links[mblcd->m_link]->m_jointName;
+                                if (oldname)
+                                {
+                                    char* newname = duplicateName(oldname);
+                                    m_objectNameMap.insert(col, newname);
+                                    link.m_jointName = newname;
+                                }
 							}
 							int mbLinkIndex = mblcd->m_link;
 
